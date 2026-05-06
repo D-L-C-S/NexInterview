@@ -1,0 +1,26 @@
+{
+  "candidate_profile": {
+    "inferred_role": "Backend Engineer",
+    "all_roles": ["Backend Engineer", "Full Stack Engineer", "DevOps Engineer"],
+    "skills": ["python", "fastapi", "postgresql", "redis", "docker", "aws", "react", "typescript"],
+    "experience_years": 3,
+    "focus_areas": [
+      "System design and scalability",
+      "Database schema design and query optimisation",
+      "Containerisation and cloud deployment",
+      "REST API design patterns",
+      "Caching strategies"
+    ]
+  },
+  "feedback_report": {
+    "avg_technical_score": 0.72,
+    "avg_confidence_score": 0.61,
+    "avg_communication_score": 0.68,
+    "avg_engagement_score": 0.75,
+    "technical_gaps": ["Distributed tracing", "Message queues (Kafka/RabbitMQ)"],
+    "communication_tips": ["Slow down when explaining complex topics", "Use STAR format for behavioural answers"],
+    "behavioural_insights": ["Shows confidence in backend topics, hesitates on system design"],
+    "overall_summary": "Strong backend fundamentals with room to grow in distributed systems.",
+    "next_steps": ["Study Kafka fundamentals", "Practice system design with mock scenarios"]
+  }
+}

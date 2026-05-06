@@ -1,0 +1,19 @@
+John Doe
+john.doe@email.com | github.com/johndoe | linkedin.com/in/johndoe
+
+EXPERIENCE
+Software Engineer — Acme Corp (2021–2024)  3 years of experience
+- Built REST APIs with FastAPI and Python
+- Designed PostgreSQL schemas for high-traffic services
+- Deployed microservices on AWS ECS with Docker
+
+SKILLS
+Python, FastAPI, PostgreSQL, Redis, Docker, AWS, React, TypeScript, Git
+
+PROJECTS
+E-commerce Platform
+- Built scalable backend handling 10k req/s using FastAPI + PostgreSQL
+- Implemented Redis caching layer reducing DB load by 60%
+
+EDUCATION
+B.Tech Computer Science — XYZ University (2017–2021)

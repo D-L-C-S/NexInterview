@@ -1,10 +1,21 @@
+from contextlib import asynccontextmanager
+
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
-from backend.api.routes import interview, resume, feedback, jobs
+from backend.api.routes import feedback, interview, jobs, resume
 from backend.api.websocket import router as ws_router
+from backend.models.database import init_db
 
-app = FastAPI(title="NexInterview API", version="0.1.0")
+
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    """Create all SQLite tables on startup (no-op if they already exist)."""
+    init_db()
+    yield
+
+
+app = FastAPI(title="NexInterview API", version="0.1.0", lifespan=lifespan)
 
 app.add_middleware(
     CORSMiddleware,

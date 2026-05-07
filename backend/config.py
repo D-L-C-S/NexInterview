@@ -3,11 +3,12 @@ from __future__ import annotations
 import sys
 from pydantic import field_validator
 from pydantic_settings import BaseSettings
+from groq import AsyncGroq
 
 
 class Settings(BaseSettings):
     # ── AI / LLM ──────────────────────────────────────────────────────────────
-    gemini_api_key: str
+    gemini_api_key: str = ""   # kept for future use; not required to start
     groq_api_key: str
 
     # ── Job Search ────────────────────────────────────────────────────────────
@@ -23,14 +24,14 @@ class Settings(BaseSettings):
         env_file = ".env"
         env_file_encoding = "utf-8"
         case_sensitive = False
+        extra = "ignore"
 
-    @field_validator("gemini_api_key", "groq_api_key", "rapidapi_key", mode="before")
+    @field_validator("groq_api_key", "rapidapi_key", mode="before")
     @classmethod
     def _not_empty(cls, v: str, info) -> str:
         if not v or v.strip() in ("", "..."):
             raise ValueError(
-                f"{info.field_name.upper()} is missing or placeholder — "
-                "add the real value to your .env file."
+                f"{info.field_name.upper()} is missing — add the real value to your .env file."
             )
         return v
 
@@ -44,3 +45,9 @@ def _load() -> Settings:
 
 
 settings = _load()
+
+# Shared async Groq client — used by all LLM modules
+llm_client = AsyncGroq(api_key=settings.groq_api_key)
+
+# llama-3.3-70b is the most capable free-tier model on Groq
+LLM_MODEL = "llama-3.3-70b-versatile"

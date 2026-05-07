@@ -23,14 +23,15 @@ def _fail(name: str, err: Exception) -> None:
 
 def test_gemini() -> bool:
     try:
-        import google.generativeai as genai
+        from google import genai
         from backend.config import settings
 
-        genai.configure(api_key=settings.gemini_api_key)
-        model = genai.GenerativeModel("gemini-1.5-flash")
-        resp = model.generate_content("Reply with exactly: pong")
+        client = genai.Client(api_key=settings.gemini_api_key)
+        resp = client.models.generate_content(
+            model=GEMINI_MODEL, contents="Reply with exactly: pong"
+        )
         assert resp.text.strip(), "Empty response from Gemini"
-        _ok(f"Gemini gemini-1.5-flash → {resp.text.strip()!r}")
+        _ok(f"Gemini gemini-2.0-flash → {resp.text.strip()!r}")
         return True
     except Exception as exc:
         _fail("Gemini", exc)

@@ -1,0 +1,34 @@
+# Web framework
+fastapi>=0.115
+uvicorn[standard]>=0.30
+python-multipart>=0.0.9
+aiofiles>=23.0
+
+# Config / validation
+pydantic>=2.7
+pydantic-settings>=2.3
+python-dotenv>=1.0
+
+# AI / LLM
+google-generativeai>=0.7
+groq>=0.9
+
+# PDF parsing
+pdfplumber>=0.11
+
+# Audio / Speech
+openai-whisper>=20240930
+librosa>=0.10
+
+# Computer Vision
+opencv-python>=4.10
+mediapipe>=0.10
+deepface>=0.0.92
+
+# Database
+sqlalchemy>=2.0
+
+# HTTP
+httpx>=0.27
+requests>=2.31
+beautifulsoup4>=4.12

@@ -3,7 +3,7 @@
  *
  * Usage:
  *   import { startListening, stopListening, onResult } from './speechHandler'
- *   onResult((transcript, isFinal) => console.log(transcript, isFinal))
+ *   onResult((transcript, isFinal, confidence) => console.log(transcript, isFinal, confidence))
  *   startListening()
  *   stopListening()
  */
@@ -19,7 +19,7 @@ let _recognition = null
 let _resultCallback = null
 
 /** Register a callback invoked on each recognition result.
- *  @param {(transcript: string, isFinal: boolean) => void} cb
+ *  @param {(transcript: string, isFinal: boolean, confidence?: number) => void} cb
  */
 export function onResult(cb) {
   _resultCallback = cb
@@ -39,16 +39,24 @@ export function startListening() {
     if (!_resultCallback) return
     let interim = ''
     let final = ''
+    const confidences = []
     for (let i = event.resultIndex; i < event.results.length; i++) {
       const result = event.results[i]
+      const confidence = result[0]?.confidence
+      if (typeof confidence === 'number' && confidence > 0) {
+        confidences.push(confidence)
+      }
       if (result.isFinal) {
         final += result[0].transcript
       } else {
         interim += result[0].transcript
       }
     }
-    if (final) _resultCallback(final.trim(), true)
-    else if (interim) _resultCallback(interim.trim(), false)
+    const avgConfidence = confidences.length
+      ? confidences.reduce((sum, value) => sum + value, 0) / confidences.length
+      : undefined
+    if (final) _resultCallback(final.trim(), true, avgConfidence)
+    else if (interim) _resultCallback(interim.trim(), false, avgConfidence)
   }
 
   _recognition.onerror = (event) => {

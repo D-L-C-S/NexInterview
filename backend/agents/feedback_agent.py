@@ -1,8 +1,17 @@
-"""Feedback Agent — generates structured post-interview coaching reports via Gemini."""
+"""Coach Agent (Feedback) — generates post-interview coaching using full session memory.
+
+This agent:
+  1. Reads the complete SessionMemory (all agent observations, reasoning, patterns)
+  2. Synthesises a holistic coaching report using the accumulated context
+  3. Produces actionable feedback that references specific Q&A moments
+  4. Uses the identified strengths/weaknesses from EvaluatorAgent observations
+"""
 from __future__ import annotations
 
 import json
 
+from backend.agents.base_agent import BaseAgent
+from backend.agents.session_memory import get_memory
 from backend.config import llm_client as _client, LLM_MODEL
 from sqlalchemy.orm import Session
 
@@ -10,20 +19,21 @@ from backend.models.database import AnswerRecord, CandidateProfile, InterviewSes
 from backend.models.schemas import FeedbackReportResponse, MultimodalScores
 
 
-_FEEDBACK_PROMPT = """\
-You are an expert interview coach. Analyse this mock interview session and generate a structured
-feedback report as a JSON object with these exact keys:
-  technical_gaps       (list[str]) — 2–4 specific technical topics the candidate needs to study
-  communication_tips   (list[str]) — 2–3 concrete tips to improve answer delivery and clarity
-  behavioural_insights (list[str]) — 1–2 observations about confidence and communication style
-  overall_summary      (str)       — 2–3 sentences summarising performance honestly but encouragingly
-  next_steps           (list[str]) — 3–5 specific, actionable learning goals with resources if possible
+class CoachAgent(BaseAgent):
+    """Agent that generates comprehensive coaching reports from session memory."""
 
-Session data:
-{context}
+    @property
+    def agent_name(self) -> str:
+        return "CoachAgent"
 
-Return only valid JSON. No markdown, no preamble.\
-"""
+    @property
+    def system_prompt(self) -> str:
+        return (
+            "You are an expert interview coach. You don't just analyse scores — "
+            "you synthesise the full session context including evaluator observations, "
+            "interviewer reasoning, and candidate trajectory to produce deeply personalised, "
+            "actionable coaching. You reference specific answers and moments from the interview."
+        )
 
 
 def _avg_score(records: list[AnswerRecord], field: str) -> float:
@@ -39,32 +49,23 @@ def _avg_score(records: list[AnswerRecord], field: str) -> float:
     return round(sum(vals) / len(vals), 3) if vals else 0.0
 
 
-def _strip_fences(text: str) -> str:
-    """Remove accidental markdown code fences from an LLM response."""
-    text = text.strip()
-    if text.startswith("```"):
-        parts = text.split("```")
-        text = parts[1]
-        if text.startswith("json"):
-            text = text[4:]
-    return text.strip()
+_coach = CoachAgent()
 
 
 async def generate_feedback(session_id: str, db: Session) -> FeedbackReportResponse:
-    """Generate a full coaching report for a completed interview session.
+    """Generate a coaching report using the CoachAgent and full session memory.
 
-    Fetches all Q&A pairs and scores from the DB, builds a structured context object,
-    then calls Gemini to produce technical gaps, communication tips, and next steps.
+    Agent loop:
+      1. Load session memory (accumulated by all agents during the interview)
+      2. THINK — CoachAgent reasons about the full session holistically
+      3. ACT — generate structured coaching output
+      4. OBSERVE — return the report
 
     Args:
         session_id: UUID of the interview session
         db:         SQLAlchemy session
 
     Returns a FeedbackReportResponse ready to send to the frontend.
-
-    Raises:
-        ValueError:   session not found
-        RuntimeError: Gemini returned unparseable JSON
     """
     session = db.query(InterviewSession).filter(InterviewSession.id == session_id).first()
     if not session:
@@ -75,32 +76,11 @@ async def generate_feedback(session_id: str, db: Session) -> FeedbackReportRespo
         .filter(CandidateProfile.id == session.profile_id)
         .first()
     )
-    questions = (
-        db.query(QuestionRecord)
-        .filter(QuestionRecord.session_id == session_id)
-        .all()
-    )
     answers = (
         db.query(AnswerRecord)
         .filter(AnswerRecord.session_id == session_id)
         .all()
     )
-
-    # Build Q&A pairs for the prompt
-    answer_map = {a.question_id: a for a in answers}
-    qa_pairs = []
-    for q in questions:
-        a = answer_map.get(q.id)
-        if a:
-            qa_pairs.append({
-                "question": q.text,
-                "category": q.category,
-                "difficulty": q.difficulty,
-                "answer": a.answer_text,
-                "technical_score": a.technical_score,
-                "depth_score": a.depth_score,
-                "feedback_snippet": a.feedback_snippet,
-            })
 
     avg_scores = MultimodalScores(
         technical_score=_avg_score(answers, "technical_score"),
@@ -109,33 +89,52 @@ async def generate_feedback(session_id: str, db: Session) -> FeedbackReportRespo
         engagement_score=_avg_score(answers, "engagement_score"),
     )
 
-    context = json.dumps({
-        "role": profile.inferred_role if profile else "Software Engineer",
-        "avg_technical_score": avg_scores.technical_score,
-        "avg_depth_score": avg_scores.depth_score,
-        "qa_pairs": qa_pairs,
-    })
+    # ── Build rich context from shared memory ─────────────────────────────
+    memory = get_memory(session_id)
+    memory_context = memory.to_context_string()
 
-    response = await _client.chat.completions.create(
-        model=LLM_MODEL,
-        messages=[{"role": "user", "content": _FEEDBACK_PROMPT.format(context=context)}],
+    # Include agent reasoning traces
+    agent_notes = "\n".join(memory.orchestrator_notes) if memory.orchestrator_notes else "(no agent notes)"
+
+    # ── CoachAgent THINK + ACT ────────────────────────────────────────────
+    coaching_data = await _coach.reason_json(
+        f"""Generate a comprehensive coaching report for this completed interview.
+
+Full session memory (includes all agent observations and reasoning):
+{memory_context}
+
+Agent coordination notes:
+{agent_notes}
+
+Identified strengths: {', '.join(memory.identified_strengths) or 'none yet'}
+Identified weaknesses: {', '.join(memory.identified_weaknesses) or 'none yet'}
+Performance trajectory: {memory.overall_trajectory}
+
+Average scores:
+  Technical: {avg_scores.technical_score:.2f}
+  Depth: {avg_scores.depth_score:.2f}
+  Confidence: {avg_scores.confidence_score:.2f}
+  Engagement: {avg_scores.engagement_score:.2f}
+
+Generate a JSON object with these exact keys:
+  technical_gaps       (list[str]) — 2–4 specific technical topics to study, referencing the actual questions where gaps appeared
+  communication_tips   (list[str]) — 2–3 concrete tips to improve answer delivery
+  behavioural_insights (list[str]) — 1–2 observations about confidence and style
+  overall_summary      (str)       — 2–3 sentences summarising performance, referencing specific strengths and the trajectory
+  next_steps           (list[str]) — 3–5 specific, actionable learning goals with resources
+
+Return only valid JSON. No markdown, no preamble.""",
         temperature=0.3,
     )
-    text = _strip_fences(response.choices[0].message.content)
 
-    try:
-        data = json.loads(text)
-    except json.JSONDecodeError as exc:
-        raise RuntimeError(
-            f"Gemini returned invalid JSON: {exc}\nRaw response (first 300 chars): {text[:300]}"
-        ) from exc
+    _coach.log(memory, f"Generated coaching report. Trajectory: {memory.overall_trajectory}")
 
     return FeedbackReportResponse(
         session_id=session_id,
         avg_scores=avg_scores,
-        technical_gaps=data.get("technical_gaps", []),
-        communication_tips=data.get("communication_tips", []),
-        behavioural_insights=data.get("behavioural_insights", []),
-        overall_summary=data.get("overall_summary", ""),
-        next_steps=data.get("next_steps", []),
+        technical_gaps=coaching_data.get("technical_gaps", []),
+        communication_tips=coaching_data.get("communication_tips", []),
+        behavioural_insights=coaching_data.get("behavioural_insights", []),
+        overall_summary=coaching_data.get("overall_summary", ""),
+        next_steps=coaching_data.get("next_steps", []),
     )

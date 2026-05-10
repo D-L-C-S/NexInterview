@@ -1,10 +1,32 @@
-"""Interview Orchestrator — drives the question loop, adapts difficulty, finalises sessions."""
+"""Orchestrator Agent — coordinates the multi-agent interview system.
+
+This is the central coordinator that:
+  1. Manages the interview lifecycle (start → Q&A loop → complete)
+  2. Delegates to specialised agents (InterviewerAgent, EvaluatorAgent)
+  3. Maintains shared SessionMemory across all agents
+  4. Makes meta-decisions about session flow based on agent outputs
+
+Agent interaction flow:
+  ┌──────────────┐     ┌───────────────────┐     ┌────────────────┐
+  │ Orchestrator │────▶│ InterviewerAgent  │────▶│ EvaluatorAgent │
+  │  (coordinator)│     │ (question design) │     │ (answer eval)  │
+  └──────┬───────┘     └───────────────────┘     └────────────────┘
+         │                       ▲                        ▲
+         │              ┌────────┴────────────────────────┘
+         ▼              │
+  ┌──────────────┐      │
+  │SessionMemory │◀─────┘  (all agents read/write)
+  └──────────────┘
+"""
 from __future__ import annotations
 
 from datetime import datetime
 
 from sqlalchemy.orm import Session
 
+from backend.agents.evaluator_agent import evaluator_agent
+from backend.agents.interviewer_agent import interviewer_agent
+from backend.agents.session_memory import get_memory
 from backend.models.database import (
     AnswerRecord, CandidateProfile, InterviewSession, QuestionRecord,
 )
@@ -13,30 +35,30 @@ from backend.models.schemas import (
     QuestionOut, QuestionResult, SessionStatus, StartInterviewResponse,
     SubmitAnswerResponse,
 )
-from backend.modules import question_generator, technical_evaluator
 
 QUESTIONS_PER_SESSION = 5
 
 
 async def start_session(profile_id: str, db: Session) -> StartInterviewResponse:
-    """Create a new interview session and return the first question.
+    """Create a new interview session, initialise shared memory, and generate the first question.
 
-    Generates the opening question at medium difficulty targeting the candidate's
-    inferred role and focus areas.
+    The orchestrator:
+      1. Loads the candidate profile from DB
+      2. Initialises shared SessionMemory with candidate context
+      3. Delegates to InterviewerAgent to generate the first question
+      4. Persists the session and question to DB
 
     Args:
         profile_id: UUID returned by POST /resume/upload
         db:         SQLAlchemy session
 
     Returns a StartInterviewResponse with session_id and the first QuestionOut.
-
-    Raises:
-        ValueError: profile not found in the database
     """
     profile = db.query(CandidateProfile).filter(CandidateProfile.id == profile_id).first()
     if not profile:
         raise ValueError(f"Profile {profile_id!r} not found")
 
+    # Create DB session
     session = InterviewSession(
         profile_id=profile_id,
         status="active",
@@ -46,14 +68,25 @@ async def start_session(profile_id: str, db: Session) -> StartInterviewResponse:
     db.commit()
     db.refresh(session)
 
-    first_q = await question_generator.generate_question(
-        role=profile.inferred_role,
-        focus_areas=profile.focus_areas,
-        difficulty=Difficulty.medium,
-        asked_questions=[],
+    # ── Initialise shared memory for all agents ───────────────────────────
+    memory = get_memory(session.id)
+    memory.profile_id = profile_id
+    memory.candidate_name = profile.name
+    memory.inferred_role = profile.inferred_role
+    memory.skills = profile.skills
+    memory.focus_areas = profile.focus_areas
+    memory.experience_years = profile.experience_years
+    memory.orchestrator_notes.append(
+        f"[Orchestrator] Session started for {profile.name} → {profile.inferred_role}"
+    )
+
+    # ── Delegate to InterviewerAgent for first question ───────────────────
+    first_q = await interviewer_agent.decide_next_question(
+        memory=memory,
         question_index=0,
     )
 
+    # Persist question
     db.add(QuestionRecord(
         id=first_q.id,
         session_id=session.id,
@@ -74,24 +107,24 @@ async def process_answer(
     confidence_score: float | None = None,
     engagement_score: float | None = None,
 ) -> SubmitAnswerResponse:
-    """Evaluate an answer, persist scores, then generate and return the next question.
+    """Process a candidate's answer through the multi-agent pipeline.
 
-    If this was the last question, marks the session as completed and returns
-    session_complete=True with next_question=None.
-
-    Difficulty adapts for the next question based on the technical score just received:
-        > 0.75 → bump up  |  < 0.40 → drop down  |  otherwise → keep
+    Orchestration flow:
+      1. Load session context
+      2. Delegate to EvaluatorAgent → evaluate answer with chain-of-thought reasoning
+      3. EvaluatorAgent writes observations to SessionMemory
+      4. Orchestrator updates session patterns (trajectory, difficulty trend)
+      5. If more questions remain: delegate to InterviewerAgent for next question
+         (InterviewerAgent reads SessionMemory to make context-aware decisions)
+      6. Persist all results to DB
 
     Args:
         session_id:       UUID of the active session
         question_id:      UUID of the question being answered
-        answer_text:      candidate's verbatim answer text
+        answer_text:      candidate's verbatim answer
         db:               SQLAlchemy session
-        confidence_score: optional 0–1 float from Person 2's audio module
-        engagement_score: optional 0–1 float from Person 2's video module
-
-    Raises:
-        ValueError: session or question not found, or session already completed
+        confidence_score: optional 0–1 from browser speech analysis
+        engagement_score: optional 0–1 from browser face mesh analysis
     """
     session = db.query(InterviewSession).filter(InterviewSession.id == session_id).first()
     if not session:
@@ -103,15 +136,18 @@ async def process_answer(
     if not question:
         raise ValueError(f"Question {question_id!r} not found")
 
-    profile = db.query(CandidateProfile).filter(CandidateProfile.id == session.profile_id).first()
-    role = profile.inferred_role if profile else "Software Engineer"
+    # Get shared memory
+    memory = get_memory(session_id)
 
-    # Evaluate the answer
-    eval_result = await technical_evaluator.evaluate_answer(
-        question=question.text,
+    # ── Agent 1: EvaluatorAgent — evaluate the answer ─────────────────────
+    eval_result = await evaluator_agent.evaluate(
+        memory=memory,
+        question_text=question.text,
+        question_category=question.category,
+        question_difficulty=question.difficulty,
         answer_text=answer_text,
-        role=role,
-        difficulty=question.difficulty,
+        confidence_score=confidence_score or 0.0,
+        engagement_score=engagement_score or 0.0,
     )
 
     # Persist answer + scores
@@ -138,11 +174,18 @@ async def process_answer(
         db.query(AnswerRecord).filter(AnswerRecord.session_id == session_id).count()
     )
 
-    # Session complete?
+    # ── Orchestrator: check if session is complete ────────────────────────
     if answered_count >= session.questions_total:
         session.status = "completed"
         session.completed_at = datetime.utcnow()
         db.commit()
+
+        memory.orchestrator_notes.append(
+            f"[Orchestrator] Session completed. {answered_count} questions answered. "
+            f"Final trajectory: {memory.overall_trajectory}. "
+            f"Avg technical: {memory.avg_technical_score:.2f}"
+        )
+
         return SubmitAnswerResponse(
             scores=scores,
             feedback_snippet=eval_result.feedback_snippet,
@@ -150,24 +193,31 @@ async def process_answer(
             session_complete=True,
         )
 
-    # Adapt difficulty and generate next question
-    next_difficulty = question_generator.adapt_difficulty(
-        current=Difficulty(question.difficulty),
-        last_technical_score=eval_result.technical_score,
-    )
-    asked_texts = [
-        q.text
-        for q in db.query(QuestionRecord).filter(QuestionRecord.session_id == session_id).all()
-    ]
+    # ── Orchestrator: update difficulty trend for InterviewerAgent ─────────
+    if memory.questions_answered >= 2:
+        recent = memory.observations[-2:]
+        avg_recent = sum((o.technical_score + o.depth_score) / 2 for o in recent) / len(recent)
+        if avg_recent > 0.7:
+            memory.difficulty_trend = "ramping_up"
+        elif avg_recent < 0.4:
+            memory.difficulty_trend = "easing_down"
+        else:
+            memory.difficulty_trend = "stable"
 
-    next_q = await question_generator.generate_question(
-        role=role,
-        focus_areas=profile.focus_areas if profile else [],
-        difficulty=next_difficulty,
-        asked_questions=asked_texts,
+    memory.orchestrator_notes.append(
+        f"[Orchestrator] After Q{answered_count}: trajectory={memory.overall_trajectory}, "
+        f"difficulty_trend={memory.difficulty_trend}"
+    )
+
+    # ── Agent 2: InterviewerAgent — generate next question ────────────────
+    # The InterviewerAgent reads the full SessionMemory (including EvaluatorAgent's
+    # observations) to make a context-aware decision about what to ask next.
+    next_q = await interviewer_agent.decide_next_question(
+        memory=memory,
         question_index=answered_count,
     )
 
+    # Persist question
     db.add(QuestionRecord(
         id=next_q.id,
         session_id=session_id,
@@ -193,9 +243,6 @@ def get_session(session_id: str, db: Session) -> InterviewSessionResponse:
         db:         SQLAlchemy session
 
     Returns an InterviewSessionResponse with candidate summary and all scored results.
-
-    Raises:
-        ValueError: session not found
     """
     session = db.query(InterviewSession).filter(InterviewSession.id == session_id).first()
     if not session:

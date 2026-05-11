@@ -1,40 +1,48 @@
 import { useNavigate } from 'react-router-dom'
 
+const features = [
+  { icon: '📄', title: 'Resume parsing', desc: 'Upload PDF or TXT — skills, experience, and projects extracted automatically.' },
+  { icon: '🎯', title: 'Role inference', desc: 'We match you to realistic job titles and tailor every question to your profile.' },
+  { icon: '🤖', title: 'Adaptive questions', desc: 'Difficulty adjusts in real time based on your answers — no two sessions are the same.' },
+  { icon: '📊', title: 'Live scoring', desc: 'Technical depth, communication, confidence, and engagement tracked per answer.' },
+  { icon: '📝', title: 'AI coaching report', desc: 'Post-session breakdown of gaps, tips, and actionable next steps.' },
+  { icon: '💼', title: 'Job matches', desc: 'Live job listings matched to your inferred role after the interview.' },
+]
+
 export default function LandingPage() {
   const navigate = useNavigate()
 
   return (
-    <div style={{ maxWidth: 700, margin: '0 auto', padding: '5rem 2rem', textAlign: 'center' }}>
-      <h1 style={{ fontSize: '2.5rem', fontWeight: 700, marginBottom: '1rem' }}>
-        NexInterview
-      </h1>
-      <p style={{ fontSize: '1.2rem', color: '#666', marginBottom: '2.5rem', lineHeight: 1.7 }}>
-        AI-powered mock interviews tailored to your resume.<br />
-        Get real-time feedback on technical skills, communication, and confidence.
-      </p>
-      <button
-        onClick={() => navigate('/upload')}
-        style={{
-          background: '#6C5CE7', color: '#fff', border: 'none',
-          padding: '14px 36px', borderRadius: 10, fontSize: '1rem',
-          fontWeight: 600, cursor: 'pointer',
-        }}
-      >
-        Get started →
-      </button>
+    <div>
+      <div className="hero">
+        <div className="fade-up" style={{ maxWidth: 580, margin: '0 auto' }}>
+          <span className="badge badge-purple" style={{ marginBottom: 20, display: 'inline-flex' }}>
+            AI-powered interview prep
+          </span>
+          <h1 style={{ fontSize: 'clamp(2rem, 5vw, 3rem)', fontWeight: 800, lineHeight: 1.15, letterSpacing: '-0.5px', marginBottom: 18, color: 'var(--text)' }}>
+            Ace your next interview<br />with AI coaching
+          </h1>
+          <p style={{ fontSize: '1.05rem', color: 'var(--text-secondary)', lineHeight: 1.75, marginBottom: 36 }}>
+            Upload your resume, get a tailored mock interview, and receive<br />
+            real-time feedback on technical skills, communication, and confidence.
+          </p>
+          <button onClick={() => navigate('/upload')} className="btn btn-primary btn-lg">
+            Upload your resume →
+          </button>
+        </div>
+      </div>
 
-      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: '1.5rem', marginTop: '4rem', textAlign: 'left' }}>
-        {[
-          ['🎯', 'Role inference', 'Upload your resume and we infer the top roles you can realistically land.'],
-          ['🤖', 'Adaptive interview', 'Questions adjust in real-time based on your answers and confidence.'],
-          ['📊', 'Full feedback', 'Get scored on technical depth, communication clarity, and confidence.'],
-        ].map(([icon, title, desc]) => (
-          <div key={title} style={{ background: '#fff', border: '1px solid #eee', borderRadius: 12, padding: '1.25rem' }}>
-            <div style={{ fontSize: 28, marginBottom: 8 }}>{icon}</div>
-            <h3 style={{ marginBottom: 6 }}>{title}</h3>
-            <p style={{ fontSize: 14, color: '#666', lineHeight: 1.6 }}>{desc}</p>
-          </div>
-        ))}
+      <div className="page-md" style={{ padding: '3rem 1.5rem 4rem' }}>
+        <p className="label" style={{ textAlign: 'center', marginBottom: 24 }}>What you get</p>
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))', gap: '1rem' }}>
+          {features.map(({ icon, title, desc }) => (
+            <div key={title} className="card card-lift fade-up" style={{ padding: '1.25rem' }}>
+              <div style={{ fontSize: 26, marginBottom: 10 }}>{icon}</div>
+              <h3 style={{ fontSize: '0.9rem', fontWeight: 700, marginBottom: 6, color: 'var(--text)' }}>{title}</h3>
+              <p style={{ fontSize: 13, color: 'var(--text-secondary)', lineHeight: 1.6 }}>{desc}</p>
+            </div>
+          ))}
+        </div>
       </div>
     </div>
   )

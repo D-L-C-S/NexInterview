@@ -48,7 +48,7 @@ def init_db() -> None:
 # ── ORM Models ────────────────────────────────────────────────────────────────
 
 class CandidateProfile(Base):
-    """Stores parsed resume data and Gemini-inferred role profile for a candidate."""
+    """Stores parsed resume data and Groq-inferred role profile for a candidate."""
 
     __tablename__ = "candidate_profiles"
 

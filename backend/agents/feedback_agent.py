@@ -11,7 +11,7 @@ from __future__ import annotations
 import json
 
 from backend.agents.base_agent import BaseAgent
-from backend.agents.session_memory import get_memory
+from backend.agents.session_memory import get_memory, clear_memory
 from backend.config import llm_client as _client, LLM_MODEL
 from sqlalchemy.orm import Session
 
@@ -36,16 +36,17 @@ class CoachAgent(BaseAgent):
         )
 
 
-def _avg_score(records: list[AnswerRecord], field: str) -> float:
-    """Compute the mean of a score field, ignoring zero values (unfilled A/V scores).
+def _avg_score(records: list[AnswerRecord], field: str, exclude_zero: bool = False) -> float:
+    """Compute the mean of a score field across all answer records.
 
     Args:
-        records: list of AnswerRecord ORM objects
-        field:   attribute name on AnswerRecord (e.g. "technical_score")
-
-    Returns the average as a float rounded to 3 decimal places, or 0.0 if no values.
+        records:      list of AnswerRecord ORM objects
+        field:        attribute name on AnswerRecord
+        exclude_zero: if True, skip 0.0 values (use for A/V scores that may be unfilled)
     """
-    vals = [getattr(r, field) for r in records if getattr(r, field, 0.0) > 0.0]
+    vals = [getattr(r, field) for r in records]
+    if exclude_zero:
+        vals = [v for v in vals if v > 0.0]
     return round(sum(vals) / len(vals), 3) if vals else 0.0
 
 
@@ -85,8 +86,8 @@ async def generate_feedback(session_id: str, db: Session) -> FeedbackReportRespo
     avg_scores = MultimodalScores(
         technical_score=_avg_score(answers, "technical_score"),
         depth_score=_avg_score(answers, "depth_score"),
-        confidence_score=_avg_score(answers, "confidence_score"),
-        engagement_score=_avg_score(answers, "engagement_score"),
+        confidence_score=_avg_score(answers, "confidence_score", exclude_zero=True),
+        engagement_score=_avg_score(answers, "engagement_score", exclude_zero=True),
     )
 
     # ── Build rich context from shared memory ─────────────────────────────
@@ -128,6 +129,7 @@ Return only valid JSON. No markdown, no preamble.""",
     )
 
     _coach.log(memory, f"Generated coaching report. Trajectory: {memory.overall_trajectory}")
+    clear_memory(session_id)
 
     return FeedbackReportResponse(
         session_id=session_id,

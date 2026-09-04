@@ -12,9 +12,12 @@
         document.documentElement.dataset.theme = dark ? 'dark' : 'light';
       })();
     </script>
-    <!-- MediaPipe CDN — required by visionHandler.js for webcam face analysis -->
-    <script src="https://cdn.jsdelivr.net/npm/@mediapipe/camera_utils/camera_utils.js" crossorigin="anonymous"></script>
-    <script src="https://cdn.jsdelivr.net/npm/@mediapipe/face_mesh/face_mesh.js" crossorigin="anonymous"></script>
+    <!-- MediaPipe CDN — required by visionHandler.js for webcam face analysis.
+         Pinned (not @latest): jsDelivr's unpinned face_mesh build has a known
+         JS-loader/WASM version-skew bug that aborts with
+         "Module.arguments has been replaced with plain arguments_". -->
+    <script src="https://cdn.jsdelivr.net/npm/@mediapipe/camera_utils@0.3.1640029074/camera_utils.js" crossorigin="anonymous"></script>
+    <script src="https://cdn.jsdelivr.net/npm/@mediapipe/face_mesh@0.4.1633559619/face_mesh.js" crossorigin="anonymous"></script>
   </head>
   <body>
     <div id="root"></div>

@@ -44,8 +44,11 @@ export async function initFaceMesh(videoEl) {
   }
 
   _faceMesh = new FaceMesh({
+    // Pinned to match the version loaded in index.html — an unpinned path here
+    // would fetch a mismatched WASM binary and reintroduce the loader/WASM
+    // version-skew abort ("Module.arguments has been replaced...").
     locateFile: (file) =>
-      `https://cdn.jsdelivr.net/npm/@mediapipe/face_mesh/${file}`,
+      `https://cdn.jsdelivr.net/npm/@mediapipe/face_mesh@0.4.1633559619/${file}`,
   })
 
   _faceMesh.setOptions({

@@ -49,5 +49,6 @@ settings = _load()
 # Shared async Groq client — used by all LLM modules
 llm_client = AsyncGroq(api_key=settings.groq_api_key)
 
-# llama-3.3-70b is the most capable free-tier model on Groq
-LLM_MODEL = "llama-3.3-70b-versatile"
+# llama-3.3-70b-versatile was retired from Groq; gpt-oss-120b is the current
+# closest equivalent (most capable general-purpose model on the free tier)
+LLM_MODEL = "openai/gpt-oss-120b"

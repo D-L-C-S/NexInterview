@@ -7,7 +7,11 @@ import httpx
 
 from backend.config import settings
 
-_JSEARCH_URL = "https://jsearch.p.rapidapi.com/search"
+# JSearch retired the plain /search route at some point after this integration was
+# written; the RapidAPI console's own current code snippet for this app confirms
+# /search-v2 is the live endpoint now (the old path 404s with "Endpoint '/search'
+# does not exist" even with an active subscription).
+_JSEARCH_URL = "https://jsearch.p.rapidapi.com/search-v2"
 _HEADERS = {
     "X-RapidAPI-Key": settings.rapidapi_key,
     "X-RapidAPI-Host": "jsearch.p.rapidapi.com",
@@ -43,8 +47,10 @@ async def search_jobs(
         resp = await client.get(_JSEARCH_URL, headers=_HEADERS, params=params)
         resp.raise_for_status()
 
-    data = resp.json().get("data", [])[:num_results]
-    return [_format_job(job, role) for job in data]
+    # /search-v2's response shape differs from the old /search: "data" is now an
+    # object with "jobs" + a pagination "cursor", not a flat list of jobs.
+    jobs = resp.json().get("data", {}).get("jobs", [])[:num_results]
+    return [_format_job(job, role) for job in jobs]
 
 
 def _format_job(job: dict, role: str) -> dict:
@@ -53,7 +59,9 @@ def _format_job(job: dict, role: str) -> dict:
     Builds a human-readable match_reason from job highlights if available,
     falling back to the first 200 chars of the description.
     """
-    highlights = job.get("job_highlights", {})
+    # job_highlights can be present but explicitly null (not just absent) on
+    # /search-v2, so `.get(..., {})` alone isn't enough — `or {}` covers both.
+    highlights = job.get("job_highlights") or {}
     qualifications = highlights.get("Qualifications", [])
     if qualifications:
         match_reason = "; ".join(qualifications[:2])

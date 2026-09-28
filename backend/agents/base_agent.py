@@ -56,7 +56,8 @@ class BaseAgent(ABC):
             ],
             temperature=temperature,
         )
-        return response.choices[0].message.content.strip()
+        # Reasoning models occasionally return no content at all
+        return (response.choices[0].message.content or "").strip()
 
     async def reason_json(self, prompt: str, temperature: float = 0.3) -> dict:
         """Ask the LLM to reason and return structured JSON output.
@@ -68,17 +69,23 @@ class BaseAgent(ABC):
         Returns the parsed JSON dict.
 
         Raises:
-            RuntimeError: if the LLM returns unparseable JSON
+            RuntimeError: if the LLM returns unparseable JSON on every attempt
         """
-        text = await self.reason(prompt, temperature)
-        text = self._strip_fences(text)
-        try:
-            return json.loads(text)
-        except json.JSONDecodeError as exc:
-            raise RuntimeError(
-                f"[{self.agent_name}] LLM returned invalid JSON: {exc}\n"
-                f"Raw (first 300 chars): {text[:300]}"
-            ) from exc
+        last_error: Exception | None = None
+        text = ""
+        # The LLM intermittently returns empty or malformed output (or the API
+        # hiccups), so retry a couple of times before failing the request.
+        for _ in range(3):
+            try:
+                text = self._extract_json(await self.reason(prompt, temperature))
+                return json.loads(text)
+            except Exception as exc:
+                last_error = exc
+        raise RuntimeError(
+            f"[{self.agent_name}] LLM returned invalid JSON after 3 attempts: "
+            f"{last_error}\n"
+            f"Raw (first 300 chars): {text[:300]}"
+        ) from last_error
 
     def log(self, memory: SessionMemory, message: str) -> None:
         """Record an observation or decision in shared session memory."""
@@ -94,3 +101,12 @@ class BaseAgent(ABC):
             if text.startswith("json"):
                 text = text[4:]
         return text.strip()
+
+    @classmethod
+    def _extract_json(cls, text: str) -> str:
+        """Strip fences and any prose around the outermost JSON object."""
+        text = cls._strip_fences(text)
+        start, end = text.find("{"), text.rfind("}")
+        if start != -1 and end > start:
+            return text[start:end + 1]
+        return text

@@ -8,16 +8,10 @@ dependencies = [
     "uvicorn[standard]>=0.30",
     "pydantic>=2.7",
     "pydantic-settings>=2.3",
-    "google-generativeai>=0.7",
     "groq>=0.9",
     "python-dotenv>=1.0",
     "requests>=2.31",
     "pdfplumber>=0.11",
-    "openai-whisper>=20240930",
-    "librosa>=0.10",
-    "opencv-python>=4.10",
-    "mediapipe>=0.10",
-    "deepface>=0.0.92",
     "sqlalchemy>=2.0",
     "aiofiles>=23.0",
     "python-multipart>=0.0.9",
@@ -27,6 +21,16 @@ dependencies = [
 ]
 
 [project.optional-dependencies]
+# Server-side audio/video analysis (audio_analyzer.py / video_analyzer.py are
+# still stubs; A/V scoring currently runs in the browser). These pull in
+# torch/tensorflow, so they are opt-in: `uv sync --extra ml`.
+ml = [
+    "openai-whisper>=20240930",
+    "librosa>=0.10",
+    "opencv-python>=4.10",
+    "mediapipe>=0.10",
+    "deepface>=0.0.92",
+]
 dev = [
     "pytest>=8.0",
     "pytest-asyncio>=0.23",

@@ -14,6 +14,18 @@ const BASE = '/api'
 
 const client = axios.create({ baseURL: BASE, timeout: 30_000 })
 
+// Surface FastAPI's `detail` message instead of axios's generic "status code 500"
+client.interceptors.response.use(undefined, (error) => {
+  const detail = error?.response?.data?.detail
+  if (detail) {
+    error.message = typeof detail === 'string' ? detail : JSON.stringify(detail)
+  } else if (error?.response?.status >= 500) {
+    // A bare 5xx with no FastAPI body comes from Vite's proxy failing to reach the backend
+    error.message = 'Backend is not reachable — is the uvicorn server running on port 8000?'
+  }
+  return Promise.reject(error)
+})
+
 // ══════════════════════════════════════════════════════════════════════════════
 // 1. POST /resume/upload — parse a resume and return a CandidateProfile
 // ══════════════════════════════════════════════════════════════════════════════

@@ -44,6 +44,8 @@ cp .env.example .env
 
 # 3. Install Python dependencies (uv manages the workspace)
 uv sync
+# (optional) server-side A/V libs — whisper, mediapipe, deepface; large downloads
+# uv sync --extra ml
 
 # 4. Run the backend
 uv run uvicorn backend.main:app --reload

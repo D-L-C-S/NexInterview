@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 import {
   isSupported as isSpeechSupported,
+  onError,
   onResult,
   startListening,
   stopListening,
@@ -32,6 +33,7 @@ export function useAudio({ autoStart = false, onFinalScore }: UseAudioOptions = 
   const [transcript, setTranscript] = useState('')
   const [interimTranscript, setInterimTranscript] = useState('')
   const [confidenceScore, setConfidenceScore] = useState(0)
+  const [error, setError] = useState<string | null>(null)
   const onFinalScoreRef = useRef(onFinalScore)
 
   useEffect(() => {
@@ -40,6 +42,17 @@ export function useAudio({ autoStart = false, onFinalScore }: UseAudioOptions = 
 
   const start = useCallback(() => {
     if (!isSpeechSupported()) return
+
+    // Each recording starts fresh so a previous answer doesn't leak into the next
+    setTranscript('')
+    setInterimTranscript('')
+    setError(null)
+
+    onError((message) => {
+      setError(message)
+      setIsListening(false)
+      setInterimTranscript('')
+    })
 
     onResult((text, isFinal, rawConfidence) => {
       if (!isFinal) {
@@ -74,6 +87,7 @@ export function useAudio({ autoStart = false, onFinalScore }: UseAudioOptions = 
 
   return {
     confidenceScore,
+    error,
     interimTranscript,
     isListening,
     isSupported: isSpeechSupported(),

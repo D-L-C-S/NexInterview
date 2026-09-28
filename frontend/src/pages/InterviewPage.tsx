@@ -74,12 +74,20 @@ export default function InterviewPage() {
 
   useEffect(() => { if (!currentQuestion && !state?.question) navigate('/upload') }, [currentQuestion, state, navigate])
 
+  // Text already in the box when recording started; speech is appended to it
+  const answerBeforeVoiceRef = useRef('')
+
   const toggleVoice = useCallback(() => {
     if (inputMode === 'voice') { audio.stop(); setInputMode('text') }
-    else if (audio.isSupported) { audio.start(); setInputMode('voice') }
-  }, [inputMode, audio])
+    else if (audio.isSupported) { answerBeforeVoiceRef.current = answer; audio.start(); setInputMode('voice') }
+  }, [inputMode, audio, answer])
 
-  useEffect(() => { if (inputMode === 'voice' && audio.transcript) setAnswer(audio.transcript) }, [inputMode, audio.transcript])
+  useEffect(() => {
+    if (inputMode === 'voice' && audio.transcript) setAnswer(`${answerBeforeVoiceRef.current} ${audio.transcript}`.trim())
+  }, [inputMode, audio.transcript])
+
+  // Recognition died (mic blocked, unsupported browser…) — fall back to typing
+  useEffect(() => { if (audio.error) setInputMode('text') }, [audio.error])
 
   const handleSubmit = async () => {
     if (!answer.trim() || !currentQuestion || !sessionId) return
@@ -163,9 +171,15 @@ export default function InterviewPage() {
             </span>
           )}
           {!audio.isSupported && (
-            <span style={{ fontSize: 12, color: 'var(--text-muted)' }}>Voice not supported in this browser</span>
+            <span style={{ fontSize: 12, color: 'var(--text-muted)' }}>Voice not supported in this browser — use Chrome or Edge</span>
           )}
         </div>
+
+        {audio.error && (
+          <div style={{ background: 'var(--red-bg)', borderLeft: '3px solid #EF4444', padding: '8px 12px', borderRadius: '0 8px 8px 0', marginBottom: 8, fontSize: 13, color: 'var(--red-text)' }}>
+            🎤 {audio.error}
+          </div>
+        )}
 
         {/* Interim transcript */}
         {inputMode === 'voice' && audio.interimTranscript && (

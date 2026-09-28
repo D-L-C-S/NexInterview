@@ -16,15 +16,6 @@ groq>=0.9
 # PDF parsing
 pdfplumber>=0.11
 
-# Audio / Speech
-openai-whisper>=20240930
-librosa>=0.10
-
-# Computer Vision
-opencv-python>=4.10
-mediapipe>=0.10
-deepface>=0.0.92
-
 # Database
 sqlalchemy>=2.0
 
@@ -32,3 +23,7 @@ sqlalchemy>=2.0
 httpx>=0.27
 requests>=2.31
 beautifulsoup4>=4.12
+
+# Optional server-side A/V analysis (modules are still stubs; A/V scoring runs
+# in the browser). Heavy — install separately if needed:
+#   pip install openai-whisper librosa opencv-python mediapipe deepface
